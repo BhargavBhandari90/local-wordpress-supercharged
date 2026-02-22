@@ -1,6 +1,38 @@
+import * as Local from '@getflywheel/local';
 import * as LocalMain from '@getflywheel/local/main';
 
 const DEBUG_CONSTANTS = ['WP_DEBUG', 'WP_DEBUG_LOG', 'WP_DEBUG_DISPLAY'] as const;
+
+type DebugCache = Record<string, boolean>;
+
+async function fetchDebugConstants(
+	wpCli: LocalMain.Services.WpCli,
+	site: Local.Site,
+): Promise<DebugCache> {
+	const results: DebugCache = {};
+
+	for (const constant of DEBUG_CONSTANTS) {
+		try {
+			const value = await wpCli.run(site, ['config', 'get', constant, `--path=${site.path}`], { ignoreErrors: true });
+			results[constant] = value?.trim() === '1' || value?.trim().toLowerCase() === 'true';
+		} catch (e) {
+			results[constant] = false;
+		}
+	}
+
+	return results;
+}
+
+function updateCache(
+	siteData: LocalMain.Services.SiteDataService,
+	siteId: string,
+	cache: DebugCache,
+): void {
+	siteData.updateSite(siteId, {
+		id: siteId,
+		superchargedAddon: { debugConstants: cache },
+	} as Partial<Local.SiteJSON>);
+}
 
 export default function (context: LocalMain.AddonMainContext): void {
 	const { wpCli, siteData, localLogger } = LocalMain.getServiceContainer().cradle;
@@ -14,18 +46,17 @@ export default function (context: LocalMain.AddonMainContext): void {
 		'supercharged:get-debug-constants',
 		async (siteId: string) => {
 			const site = siteData.getSite(siteId);
-			const results: Record<string, boolean> = {};
+			const cached = (site as any).superchargedAddon?.debugConstants as DebugCache | undefined;
 
-			for (const constant of DEBUG_CONSTANTS) {
-				try {
-					const value = await wpCli.run(site, ['config', 'get', constant, `--path=${site.path}`], { ignoreErrors: true });
-					results[constant] = value?.trim() === '1' || value?.trim().toLowerCase() === 'true';
-				} catch (e) {
-					results[constant] = false;
-				}
+			if (cached) {
+				logger.info(`Returning cached debug constants for site ${siteId}`);
+				return cached;
 			}
 
-			logger.info(`Fetched debug constants for site ${siteId}: ${JSON.stringify(results)}`);
+			const results = await fetchDebugConstants(wpCli, site);
+			updateCache(siteData, siteId, results);
+
+			logger.info(`Fetched and cached debug constants for site ${siteId}: ${JSON.stringify(results)}`);
 			return results;
 		},
 	);
@@ -37,8 +68,12 @@ export default function (context: LocalMain.AddonMainContext): void {
 			const wpValue = value ? 'true' : 'false';
 
 			await wpCli.run(site, ['config', 'set', constant, wpValue, '--raw', '--add', `--path=${site.path}`]);
-			logger.info(`Set ${constant} to ${wpValue} for site ${siteId}`);
 
+			const cached = (site as any).superchargedAddon?.debugConstants as DebugCache | undefined;
+			const updatedCache = { ...cached, [constant]: value };
+			updateCache(siteData, siteId, updatedCache);
+
+			logger.info(`Set ${constant} to ${wpValue} for site ${siteId} and updated cache`);
 			return { success: true };
 		},
 	);

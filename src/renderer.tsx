@@ -24,6 +24,7 @@ export default function (context: LocalRenderer.AddonRendererContext): void {
 	const DebugSwitches: React.FC<DebugSwitchesProps> = ({ site }) => {
 		const [constants, setConstants] = useState<DebugState>(DEFAULT_STATE);
 		const [loading, setLoading] = useState(true);
+		const [updating, setUpdating] = useState<Record<string, boolean>>({});
 
 		useEffect(() => {
 			LocalRenderer.ipcAsync('supercharged:get-debug-constants', site.id)
@@ -51,11 +52,14 @@ export default function (context: LocalRenderer.AddonRendererContext): void {
 			async (name: string, value: boolean) => {
 				const previous = constants[name as keyof DebugState];
 				setConstants((prev) => ({ ...prev, [name]: value }));
+				setUpdating((prev) => ({ ...prev, [name]: true }));
 
 				try {
 					await LocalRenderer.ipcAsync('supercharged:set-debug-constant', site.id, name, value);
 				} catch (e) {
 					setConstants((prev) => ({ ...prev, [name]: previous }));
+				} finally {
+					setUpdating((prev) => ({ ...prev, [name]: false }));
 				}
 			},
 			[site.id, constants],
@@ -72,6 +76,7 @@ export default function (context: LocalRenderer.AddonRendererContext): void {
 						<Switch
 							tiny={true}
 							flat={true}
+							disabled={!!updating[constant]}
 							name={constant}
 							checked={constants[constant]}
 							onChange={handleToggle}

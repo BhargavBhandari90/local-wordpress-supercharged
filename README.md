@@ -1,73 +1,89 @@
-# Local Boilerplate Add-on
+# Local WordPress Supercharged
 
-https://build.localwp.com/
+A [Local by Flywheel](https://localwp.com/) addon that gives you instant control over WordPress debug constants directly from the Site Overview page.
 
-## Get Started with the Local Add-on Generator
+## Features
 
-Get up and running with your new add-on quickly and easily with the [Local Add-on Generator](https://github.com/getflywheel/create-local-addon). It is super simple to set up, and can help you start developing your new add-on in no time!
+### Toggle Debug Constants from the UI
 
-The generator uses this boilerplate add-on to get you started, making setup easy and fast. The README for the generator also has more information on how to create an amazing add-on for Local, so be sure to check it out!
+Three toggle switches are injected into the **Site Info Overview** page, letting you enable or disable WordPress debug constants without ever touching `wp-config.php` by hand:
+
+- **WP_DEBUG** — Enables WordPress debug mode
+- **WP_DEBUG_LOG** — Writes debug output to `wp-content/debug.log`
+- **WP_DEBUG_DISPLAY** — Shows/hides errors on the front end
+
+Each switch uses WP-CLI under the hood (`wp config get` / `wp config set --raw --add`) to read and write the constants.
+
+### Smart Caching
+
+Constant values are cached on the SiteJSON object, so switching between sites is instant — no WP-CLI calls needed. The cache is:
+
+- **Written** after every fetch and every toggle
+- **Invalidated automatically** by comparing the cache timestamp against `wp-config.php`'s file modification time (`mtime`)
+- A single `fs.statSync` call (~0.1ms) determines freshness — three WP-CLI spawns are only triggered on cache miss
+
+### Live File Watching
+
+If you edit `wp-config.php` directly (in a text editor, via SSH, or with another tool), the addon detects the change in real time and updates the switches automatically:
+
+- Uses `fs.watch` (OS-level file system events) — not polling
+- Watcher lifecycle is tied to the component: starts when you view a site, stops when you navigate away
+- A self-writing guard prevents the watcher from firing during addon-initiated writes, eliminating UI flicker
+
+### Optimistic UI with Rollback
+
+When you toggle a switch, the UI updates immediately (optimistic update). If the WP-CLI call fails, the switch reverts to its previous state. Each switch is independently disabled while its write is in flight, so you can toggle multiple constants without waiting.
 
 ## Installation
 
-### Clone
+Clone the repository into the Local addons directory for your platform:
 
-Clone the repository into the following directory depending on your platform:
+- **macOS**: `~/Library/Application Support/Local/addons`
+- **Windows**: `C:\Users\username\AppData\Roaming\Local\addons`
+- **Linux**: `~/.config/Local/addons`
 
--   macOS: `~/Library/Application Support/Local/addons`
--   Windows: `C:\Users\username\AppData\Roaming\Local\addons`
--   Debian Linux: `~/.config/Local/addons`
+Then:
 
-*You can replace 'Local' with 'Local Beta' if you want to create the add-on for Local Beta.*
+```bash
+yarn install
+yarn build
+```
 
-### Install Add-on Dependencies
-
-`yarn install`
-
-### Add Add-on to Local
-
-1. Clone repo directly into the add-ons folder (paths described above)
-2. `yarn install` (install dependencies)
-2. `yarn build`
-3. Open Local and enable add-on
+Open Local and enable the addon.
 
 ## Development
 
+### Project Structure
+
+```
+src/
+  main.ts                                      # Main process entry point (thin shell)
+  renderer.tsx                                  # Renderer process entry point (thin shell)
+  shared/
+    types.ts                                    # Shared types, constants, IPC channel names
+  features/
+    debug-constants/
+      debug-constants.service.ts                # WP-CLI fetch/set, cache read/write
+      debug-constants.watcher.ts                # fs.watch lifecycle, self-writing guard
+      debug-constants.ipc.ts                    # IPC handler registration
+      DebugSwitches.tsx                         # React component (factory pattern)
+      debug-constants.hooks.tsx                 # Renderer hook registration
+```
+
+The codebase is organized by feature. Each feature is self-contained under `src/features/`. Adding a new feature means creating a new directory and adding one import + one call in each entry point.
+
+### Build
+
+```bash
+yarn build        # Compile TypeScript to lib/
+yarn watch        # Compile in watch mode
+```
+
 ### External Libraries
 
-- @getflywheel/local provides type definitions for Local's Add-on API.
-	- Node Module: https://www.npmjs.com/package/@getflywheel/local-components
-	- GitHub Repo: https://github.com/getflywheel/local-components
-
-- @getflywheel/local-components provides reusable React components to use in your Local add-on.
-	- Node Module: https://www.npmjs.com/package/@getflywheel/local
-	- GitHub Repo: https://github.com/getflywheel/local-addon-api
-	- Style Guide: https://getflywheel.github.io/local-components
-
-### Folder Structure
-
-All files in `/src` will be transpiled to `/lib` using [TypeScript](https://www.typescriptlang.org/). Anything in `/lib` will be overwritten.
-
-### Development Workflow
-
-If you are looking for help getting started, you can consult [the documentation for the add-on generator](https://github.com/getflywheel/create-local-addon#next-steps).
-
-You can consult the [Local add-on API](https://getflywheel.github.io/local-addon-api), which provides a wide range of values and functions for developing your add-on.
+- **@getflywheel/local** — Type definitions for Local's addon API
+- **@getflywheel/local-components** — React component library (Switch, TableListRow, etc.)
 
 ## License
 
 MIT
-
-## CLAUDE instructions
-
-Read the ../../README.md and ../../CLAUDE.md file to revise your instructions on building the addon.
-
-### Version 1
-
-This addons implements the following:
-- Uses the `Switch` component to implement 3 switches to toggle WP_DEBUG, WP_DEBUG_LOG and WP_DEBUG_DISPLAY.
-- Each `Switch` is wrapped in a TableListRow.
-- The switches are implemented on the `SiteInfoOverview_TableList` page.
-- Toggling the switches should trigger the WP-CLI (WordPress CLI) command to get and set the constants. For example:
-  - wp config get <constant> --path=<site_path>
-  - wp config set <constant> <value> --raw --add --path=<site_path>

@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 1.3.2.1 — [`591dec1`](../../commit/591dec1)
+
+- Added comprehensive JSDoc documentation to `main.ts` and `renderer.tsx`
+- Documented file-level overviews, all types/interfaces, helper functions, IPC channels, component lifecycle, and inline logic
+
 ## Version 1.3.2 — [`d86684e`](../../commit/d86684e)
 
 - Fix UI flicker (enable-disable-enable) when toggling a switch

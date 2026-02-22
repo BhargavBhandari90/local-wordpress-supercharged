@@ -1,4 +1,5 @@
 import * as LocalRenderer from '@getflywheel/local/renderer';
+import { ipcRenderer } from 'electron';
 import { TableListRow } from '@getflywheel/local-components';
 import { Switch } from '@getflywheel/local-components';
 
@@ -29,6 +30,21 @@ export default function (context: LocalRenderer.AddonRendererContext): void {
 				.then((result: DebugState) => setConstants(result))
 				.catch(() => setConstants(DEFAULT_STATE))
 				.finally(() => setLoading(false));
+
+			LocalRenderer.ipcAsync('supercharged:watch-site', site.id);
+
+			const handleExternalChange = (_event: any, siteId: string, updated: DebugState) => {
+				if (siteId === site.id) {
+					setConstants(updated);
+				}
+			};
+
+			ipcRenderer.on('supercharged:debug-constants-changed', handleExternalChange);
+
+			return () => {
+				ipcRenderer.removeListener('supercharged:debug-constants-changed', handleExternalChange);
+				LocalRenderer.ipcAsync('supercharged:unwatch-site', site.id);
+			};
 		}, [site.id]);
 
 		const handleToggle = useCallback(

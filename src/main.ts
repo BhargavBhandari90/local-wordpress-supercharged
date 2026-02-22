@@ -64,6 +64,55 @@ export default function (context: LocalMain.AddonMainContext): void {
 		addon: 'wordpress-supercharged',
 	});
 
+	const watchers = new Map<string, fs.FSWatcher>();
+
+	function watchSite(siteId: string): void {
+		if (watchers.has(siteId)) {
+			return;
+		}
+
+		const site = siteData.getSite(siteId);
+		const configPath = getWpConfigPath(site);
+
+		try {
+			const watcher = fs.watch(configPath, async (eventType) => {
+				if (eventType !== 'change') {
+					return;
+				}
+
+				logger.info(`wp-config.php changed externally for site ${siteId}, refreshing`);
+
+				const freshSite = siteData.getSite(siteId);
+				const results = await fetchDebugConstants(wpCli, freshSite);
+				updateCache(siteData, siteId, results);
+
+				LocalMain.sendIPCEvent('supercharged:debug-constants-changed', siteId, results);
+			});
+
+			watchers.set(siteId, watcher);
+		} catch (e) {
+			logger.warn(`Could not watch wp-config.php for site ${siteId}: ${e}`);
+		}
+	}
+
+	LocalMain.addIpcAsyncListener(
+		'supercharged:watch-site',
+		async (siteId: string) => {
+			watchSite(siteId);
+		},
+	);
+
+	LocalMain.addIpcAsyncListener(
+		'supercharged:unwatch-site',
+		async (siteId: string) => {
+			const watcher = watchers.get(siteId);
+			if (watcher) {
+				watcher.close();
+				watchers.delete(siteId);
+			}
+		},
+	);
+
 	LocalMain.addIpcAsyncListener(
 		'supercharged:get-debug-constants',
 		async (siteId: string) => {

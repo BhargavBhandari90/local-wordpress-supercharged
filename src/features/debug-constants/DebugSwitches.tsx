@@ -96,7 +96,10 @@ export function createDebugSwitches(React: typeof import('react')): React.FC<Deb
 				setUpdating((prev) => ({ ...prev, [name]: true }));
 
 				try {
-					await LocalRenderer.ipcAsync(IPC_CHANNELS.SET_DEBUG_CONSTANT, site.id, name, value);
+					const result = await LocalRenderer.ipcAsync(IPC_CHANNELS.SET_DEBUG_CONSTANT, site.id, name, value);
+					if (result?.constants) {
+						setConstants(result.constants);
+					}
 				} catch (e) {
 					setConstants((prev) => ({ ...prev, [name]: previous }));
 				} finally {

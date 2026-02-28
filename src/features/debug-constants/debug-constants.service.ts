@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as Local from '@getflywheel/local';
 import * as LocalMain from '@getflywheel/local/main';
-import { DEBUG_CONSTANTS, DebugConstantsMap, SuperchargedCache } from '../../shared/types';
+import { CACHE_VERSION, DEBUG_CONSTANTS, DebugConstantName, DebugConstantsMap, SuperchargedCache, WP_DEFAULTS } from '../../shared/types';
 
 /**
  * Returns the absolute filesystem path to wp-config.php for a given site.
@@ -73,10 +73,10 @@ export async function fetchDebugConstants(
 
 	for (const constant of DEBUG_CONSTANTS) {
 		try {
-			const value = await wpCli.run(site, ['config', 'get', constant, `--path=${site.path}`], { ignoreErrors: true });
+			const value = await wpCli.run(site, ['config', 'get', constant, `--path=${site.path}`]);
 			results[constant] = value?.trim() === '1' || value?.trim().toLowerCase() === 'true';
 		} catch (e) {
-			results[constant] = false;
+			results[constant] = WP_DEFAULTS[constant as DebugConstantName];
 		}
 	}
 
@@ -103,6 +103,51 @@ export async function setDebugConstant(
 ): Promise<void> {
 	const wpValue = value ? 'true' : 'false';
 	await wpCli.run(site, ['config', 'set', constant, wpValue, '--raw', '--add', `--path=${site.path}`]);
+}
+
+/**
+ * Checks whether a constant is explicitly defined in wp-config.php.
+ *
+ * Runs `wp config get <constant>` without `ignoreErrors`. If the constant
+ * exists, WP-CLI succeeds and this returns true. If the constant is not
+ * defined, WP-CLI throws and this returns false.
+ *
+ * @param wpCli    — The WpCli service instance.
+ * @param site     — The Local Site object.
+ * @param constant — The constant name to check.
+ * @returns        — true if the constant exists in wp-config.php, false otherwise.
+ */
+export async function isConstantDefined(
+	wpCli: LocalMain.Services.WpCli,
+	site: Local.Site,
+	constant: string,
+): Promise<boolean> {
+	try {
+		await wpCli.run(site, ['config', 'get', constant, `--path=${site.path}`]);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Deletes a constant from wp-config.php via WP-CLI.
+ *
+ * Runs: `wp config delete <constant> --path=<site_path>`
+ *
+ * Used when a constant should revert to its WordPress core runtime default
+ * (e.g. removing WP_DEBUG_DISPLAY so WP uses its default of true).
+ *
+ * @param wpCli    — The WpCli service instance.
+ * @param site     — The Local Site object.
+ * @param constant — The constant name to delete.
+ */
+export async function deleteConstant(
+	wpCli: LocalMain.Services.WpCli,
+	site: Local.Site,
+	constant: string,
+): Promise<void> {
+	await wpCli.run(site, ['config', 'delete', constant, `--path=${site.path}`]);
 }
 
 /**
@@ -140,6 +185,7 @@ export function writeCache(
 		superchargedAddon: {
 			debugConstants: cache,
 			cachedAt: Date.now(),
+			cacheVersion: CACHE_VERSION,
 		},
 	} as Partial<Local.SiteJSON>);
 }

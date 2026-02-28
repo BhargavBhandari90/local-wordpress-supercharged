@@ -25,6 +25,13 @@ export type DebugConstantName = typeof DEBUG_CONSTANTS[number];
 export type DebugConstantsMap = Record<DebugConstantName, boolean>;
 
 /**
+ * Current cache format version. Bumped when the shape or semantics of cached
+ * data change in a way that makes old caches unreliable. Caches written with
+ * an older (or missing) version are treated as stale and re-fetched.
+ */
+export const CACHE_VERSION = 3;
+
+/**
  * The shape of the data persisted on the SiteJSON object under the
  * `superchargedAddon` key via `siteData.updateSite()`.
  *
@@ -32,21 +39,36 @@ export type DebugConstantsMap = Record<DebugConstantName, boolean>;
  * @property cachedAt       — Unix timestamp (ms) of when the cache was last written.
  *                            Compared against wp-config.php's mtime to detect
  *                            external modifications and invalidate stale caches.
+ * @property cacheVersion   — Format version. Caches missing this field or with
+ *                            an older version are invalidated on read.
  */
 export interface SuperchargedCache {
 	debugConstants: DebugConstantsMap;
 	cachedAt: number;
+	cacheVersion?: number;
 }
 
 /**
- * Default state: all constants off. Used as the initial renderer state
- * and as a fallback when fetching fails.
+ * WordPress core runtime defaults for each debug constant.
+ * Used by fetchDebugConstants as the fallback when a constant
+ * is not explicitly defined in wp-config.php.
+ *
+ * Per wp-settings.php:
+ *   - WP_DEBUG defaults to false
+ *   - WP_DEBUG_LOG defaults to false
+ *   - WP_DEBUG_DISPLAY defaults to true
  */
-export const DEFAULT_DEBUG_STATE: DebugConstantsMap = {
+export const WP_DEFAULTS: DebugConstantsMap = {
 	WP_DEBUG: false,
 	WP_DEBUG_LOG: false,
-	WP_DEBUG_DISPLAY: false,
+	WP_DEBUG_DISPLAY: true,
 };
+
+/**
+ * Default state: used as the initial renderer state and as a
+ * fallback when fetching fails. Matches WP core defaults.
+ */
+export const DEFAULT_DEBUG_STATE: DebugConstantsMap = { ...WP_DEFAULTS };
 
 /**
  * IPC channel names, centralized to avoid typos and enable find-all-references.

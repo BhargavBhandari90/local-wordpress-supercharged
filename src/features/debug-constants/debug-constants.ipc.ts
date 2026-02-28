@@ -7,10 +7,12 @@
  */
 
 import * as LocalMain from '@getflywheel/local/main';
-import { IPC_CHANNELS, SuperchargedCache } from '../../shared/types';
+import { CACHE_VERSION, IPC_CHANNELS } from '../../shared/types';
 import {
 	fetchDebugConstants,
 	setDebugConstant,
+	deleteConstant,
+	isConstantDefined,
 	readCache,
 	writeCache,
 	getWpConfigMtime,
@@ -77,7 +79,7 @@ export function registerDebugConstantsIpc(deps: IpcDeps): void {
 			const site = siteData.getSite(siteId);
 			const cached = readCache(site);
 
-			if (cached?.debugConstants && cached.cachedAt >= getWpConfigMtime(site)) {
+			if (cached?.debugConstants && cached.cacheVersion === CACHE_VERSION && cached.cachedAt >= getWpConfigMtime(site)) {
 				logger.info(`Returning cached debug constants for site ${siteId}`);
 				return cached.debugConstants;
 			}
@@ -93,11 +95,16 @@ export function registerDebugConstantsIpc(deps: IpcDeps): void {
 	/**
 	 * Set a single debug constant in wp-config.php.
 	 *
+	 * Special handling for WP_DEBUG_DISPLAY:
+	 *   - Setting to false → writes to file (overrides the WP default of true).
+	 *   - Setting to true → deletes from file if present, letting WP use its default.
+	 *
 	 * Flow:
 	 * 1. Mark self-writing to suppress the file watcher.
-	 * 2. Run `wp config set` via WP-CLI.
+	 * 2. Write or delete the constant as appropriate.
 	 * 3. Clear self-writing guard after 500ms.
-	 * 4. Merge the new value into the existing cache.
+	 * 4. Re-fetch all constants to get authoritative state, persist to cache.
+	 * 5. Return the full constants map so the renderer picks up changes.
 	 */
 	LocalMain.addIpcAsyncListener(
 		IPC_CHANNELS.SET_DEBUG_CONSTANT,
@@ -106,17 +113,23 @@ export function registerDebugConstantsIpc(deps: IpcDeps): void {
 
 			watcher.markSelfWriting(siteId);
 			try {
-				await setDebugConstant(wpCli, site, constant, value);
+				if (constant === 'WP_DEBUG_DISPLAY' && value === true) {
+					const defined = await isConstantDefined(wpCli, site, constant);
+					if (defined) {
+						await deleteConstant(wpCli, site, constant);
+					}
+				} else {
+					await setDebugConstant(wpCli, site, constant, value);
+				}
 			} finally {
 				watcher.clearSelfWriting(siteId);
 			}
 
-			const cached = readCache(site);
-			const updatedCache = { ...cached?.debugConstants, [constant]: value };
-			writeCache(siteData, siteId, updatedCache);
+			const results = await fetchDebugConstants(wpCli, site);
+			writeCache(siteData, siteId, results);
 
 			logger.info(`Set ${constant} to ${value} for site ${siteId} and updated cache`);
-			return { success: true };
+			return { success: true, constants: results };
 		},
 	);
 }

@@ -46,6 +46,15 @@ export interface SuperchargedCache {
 	debugConstants: DebugConstantsMap;
 	cachedAt: number;
 	cacheVersion?: number;
+	ngrok?: NgrokCache;
+}
+
+/**
+ * Persisted ngrok state for a site, stored under `superchargedAddon.ngrok`.
+ */
+export interface NgrokCache {
+	enabled: boolean;
+	url: string;
 }
 
 /**
@@ -76,10 +85,17 @@ export const DEFAULT_DEBUG_STATE: DebugConstantsMap = { ...WP_DEFAULTS };
  * Channels prefixed with `supercharged:` to namespace them and avoid
  * collisions with other addons.
  */
+export const NGROK_CONSTANTS = ['WP_HOME', 'WP_SITEURL'] as const;
+
 export const IPC_CHANNELS = {
 	GET_DEBUG_CONSTANTS: 'supercharged:get-debug-constants',
 	SET_DEBUG_CONSTANT: 'supercharged:set-debug-constant',
 	WATCH_SITE: 'supercharged:watch-site',
 	UNWATCH_SITE: 'supercharged:unwatch-site',
 	DEBUG_CONSTANTS_CHANGED: 'supercharged:debug-constants-changed',
+	GET_NGROK: 'supercharged:get-ngrok',
+	APPLY_NGROK: 'supercharged:apply-ngrok',
+	ENABLE_NGROK: 'supercharged:enable-ngrok',
+	CLEAR_NGROK: 'supercharged:clear-ngrok',
+	NGROK_CHANGED: 'supercharged:ngrok-changed',
 } as const;

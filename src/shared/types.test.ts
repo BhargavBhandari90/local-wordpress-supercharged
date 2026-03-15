@@ -51,6 +51,11 @@ describe('IPC_CHANNELS', () => {
 		expect(IPC_CHANNELS).toHaveProperty('WATCH_SITE');
 		expect(IPC_CHANNELS).toHaveProperty('UNWATCH_SITE');
 		expect(IPC_CHANNELS).toHaveProperty('DEBUG_CONSTANTS_CHANGED');
+		expect(IPC_CHANNELS).toHaveProperty('GET_NGROK');
+		expect(IPC_CHANNELS).toHaveProperty('APPLY_NGROK');
+		expect(IPC_CHANNELS).toHaveProperty('ENABLE_NGROK');
+		expect(IPC_CHANNELS).toHaveProperty('CLEAR_NGROK');
+		expect(IPC_CHANNELS).toHaveProperty('NGROK_CHANGED');
 	});
 
 	it('prefixes all channels with "supercharged:"', () => {

@@ -50,6 +50,7 @@ export function createMockWpCli() {
 export function createMockSiteData(defaultSite?: Local.Site) {
 	return {
 		getSite: jest.fn((siteId: string) => defaultSite ?? createMockSite({ id: siteId })),
+		getSites: jest.fn(() => ({})),
 		updateSite: jest.fn(),
 	};
 }

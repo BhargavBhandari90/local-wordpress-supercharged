@@ -1,0 +1,195 @@
+/**
+ * NgrokRow.tsx -- React component for toggling ngrok URL overrides.
+ *
+ * Renders a TableListRow with: Switch, URL input, Apply button, Clear button.
+ * URL is only persisted when the user explicitly clicks Apply.
+ * No blur handlers, no cleanup persistence.
+ */
+
+import * as LocalRenderer from '@getflywheel/local/renderer';
+import { ipcRenderer } from 'electron';
+import { TableListRow } from '@getflywheel/local-components';
+import { Switch } from '@getflywheel/local-components';
+import { TextButtonExternal } from '@getflywheel/local-components';
+import { IPC_CHANNELS } from '../../shared/types';
+
+interface NgrokRowProps {
+	site: { id: string };
+}
+
+export function createNgrokRow(React: typeof import('react')): React.FC<NgrokRowProps> {
+	const { useState, useEffect, useCallback } = React;
+
+	const NgrokRow: React.FC<NgrokRowProps> = ({ site }) => {
+		const [enabled, setEnabled] = useState(false);
+		const [url, setUrl] = useState('');
+		const [savedUrl, setSavedUrl] = useState('');
+		const [loading, setLoading] = useState(true);
+		const [updating, setUpdating] = useState(false);
+
+		useEffect(() => {
+			let active = true;
+
+			LocalRenderer.ipcAsync(IPC_CHANNELS.GET_NGROK, site.id)
+				.then((result: { enabled: boolean; url: string }) => {
+					if (active) {
+						setEnabled(!!result.enabled);
+						setUrl(result.url || '');
+						setSavedUrl(result.url || '');
+					}
+				})
+				.catch(() => {
+					if (active) {
+						setEnabled(false);
+						setUrl('');
+						setSavedUrl('');
+					}
+				})
+				.finally(() => {
+					if (active) {
+						setLoading(false);
+					}
+				});
+
+			const handleNgrokChanged = (_event: any, siteId: string, newEnabled: boolean) => {
+				if (siteId === site.id && active) {
+					setEnabled(newEnabled);
+				}
+			};
+
+			ipcRenderer.on(IPC_CHANNELS.NGROK_CHANGED, handleNgrokChanged);
+
+			return () => {
+				active = false;
+				ipcRenderer.removeListener(IPC_CHANNELS.NGROK_CHANGED, handleNgrokChanged);
+			};
+		}, [site.id]);
+
+		const handleToggle = useCallback(
+			async (_name: string, checked: boolean) => {
+				if (!savedUrl.trim()) {
+					return;
+				}
+
+				const previousEnabled = enabled;
+				setEnabled(checked);
+				setUpdating(true);
+
+				try {
+					await LocalRenderer.ipcAsync(
+						IPC_CHANNELS.ENABLE_NGROK,
+						site.id,
+						checked,
+						savedUrl.trim(),
+					);
+				} catch (e) {
+					setEnabled(previousEnabled);
+				} finally {
+					setUpdating(false);
+				}
+			},
+			[site.id, enabled, savedUrl],
+		);
+
+		const handleUrlChange = useCallback(
+			(event: any) => {
+				setUrl(event.target.value);
+			},
+			[],
+		);
+
+		const handleApply = useCallback(
+			async () => {
+				const trimmed = url.trim();
+				if (!trimmed) {
+					return;
+				}
+
+				setUpdating(true);
+				try {
+					await LocalRenderer.ipcAsync(IPC_CHANNELS.APPLY_NGROK, site.id, trimmed);
+					setSavedUrl(trimmed);
+					setUrl(trimmed);
+				} catch (e) {
+					// keep current input value
+				} finally {
+					setUpdating(false);
+				}
+			},
+			[site.id, url],
+		);
+
+		const handleClear = useCallback(
+			async () => {
+				setUpdating(true);
+				try {
+					await LocalRenderer.ipcAsync(IPC_CHANNELS.CLEAR_NGROK, site.id);
+					setEnabled(false);
+					setUrl('');
+					setSavedUrl('');
+				} catch (e) {
+					// keep current state
+				} finally {
+					setUpdating(false);
+				}
+			},
+			[site.id],
+		);
+
+		if (loading) {
+			return null;
+		}
+
+		const urlDirty = url.trim() !== savedUrl;
+
+		return (
+			<TableListRow label="ngrok" alignMiddle>
+				<div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+					<Switch
+						tiny={true}
+						flat={true}
+						disabled={updating || !savedUrl.trim()}
+						checked={enabled}
+						onChange={handleToggle}
+						name="ngrok-toggle"
+					/>
+					<input
+						type="text"
+						placeholder="Enter the ngrok URL"
+						value={url}
+						onChange={handleUrlChange}
+						readOnly={enabled}
+						disabled={updating}
+						style={{
+							flexGrow: 1,
+							minWidth: '220px',
+							background: 'transparent',
+							border: 'none',
+							borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+							color: 'inherit',
+							fontSize: 'inherit',
+							fontFamily: 'inherit',
+							padding: '4px 0',
+							outline: 'none',
+							opacity: enabled ? 0.6 : 1,
+						}}
+					/>
+					<TextButtonExternal
+						onClick={handleApply}
+						disabled={updating || enabled || !url.trim() || !urlDirty}
+					>
+						Save
+					</TextButtonExternal>
+					<TextButtonExternal
+						onClick={handleClear}
+						disabled={updating || (!url && !savedUrl)}
+					>
+						Clear
+					</TextButtonExternal>
+				</div>
+			</TableListRow>
+		);
+	};
+
+	return NgrokRow;
+}

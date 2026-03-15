@@ -180,9 +180,13 @@ export function writeCache(
 	siteId: string,
 	cache: DebugConstantsMap,
 ): void {
+	const site = siteData.getSite(siteId);
+	const existing = (site as any)?.superchargedAddon || {};
+
 	siteData.updateSite(siteId, {
 		id: siteId,
 		superchargedAddon: {
+			...existing,
 			debugConstants: cache,
 			cachedAt: Date.now(),
 			cacheVersion: CACHE_VERSION,

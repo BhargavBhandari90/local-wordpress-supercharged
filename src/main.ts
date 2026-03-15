@@ -9,6 +9,7 @@
 
 import * as LocalMain from '@getflywheel/local/main';
 import { registerDebugConstantsIpc } from './features/debug-constants/debug-constants.ipc';
+import { registerNgrokIpc } from './features/ngrok/ngrok.ipc';
 
 export default function (context: LocalMain.AddonMainContext): void {
 	const { wpCli, siteData, localLogger } = LocalMain.getServiceContainer().cradle;
@@ -19,4 +20,5 @@ export default function (context: LocalMain.AddonMainContext): void {
 	});
 
 	registerDebugConstantsIpc({ wpCli, siteData, logger });
+	registerNgrokIpc({ wpCli, siteData, logger });
 }

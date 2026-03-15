@@ -26,6 +26,8 @@ export function createNgrokRow(React: typeof import('react')): React.FC<NgrokRow
 		const [savedUrl, setSavedUrl] = useState('');
 		const [loading, setLoading] = useState(true);
 		const [updating, setUpdating] = useState(false);
+		const [processStatus, setProcessStatus] = useState<'stopped' | 'running'>('stopped');
+		const [error, setError] = useState('');
 
 		useEffect(() => {
 			let active = true;
@@ -51,17 +53,34 @@ export function createNgrokRow(React: typeof import('react')): React.FC<NgrokRow
 					}
 				});
 
+			LocalRenderer.ipcAsync(IPC_CHANNELS.GET_NGROK_PROCESS_STATUS, site.id)
+				.then((status: string) => {
+					if (active) {
+						setProcessStatus(status === 'running' ? 'running' : 'stopped');
+					}
+				})
+				.catch(() => {});
+
 			const handleNgrokChanged = (_event: any, siteId: string, newEnabled: boolean) => {
 				if (siteId === site.id && active) {
 					setEnabled(newEnabled);
 				}
 			};
 
+			const handleProcessStatusChanged = (_event: any, siteId: string, status: string, errorMsg?: string) => {
+				if (siteId === site.id && active) {
+					setProcessStatus(status === 'running' ? 'running' : 'stopped');
+					setError(errorMsg || '');
+				}
+			};
+
 			ipcRenderer.on(IPC_CHANNELS.NGROK_CHANGED, handleNgrokChanged);
+			ipcRenderer.on(IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, handleProcessStatusChanged);
 
 			return () => {
 				active = false;
 				ipcRenderer.removeListener(IPC_CHANNELS.NGROK_CHANGED, handleNgrokChanged);
+				ipcRenderer.removeListener(IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, handleProcessStatusChanged);
 			};
 		}, [site.id]);
 
@@ -136,6 +155,25 @@ export function createNgrokRow(React: typeof import('react')): React.FC<NgrokRow
 			[site.id],
 		);
 
+		const handleStartStop = useCallback(
+			async () => {
+				setUpdating(true);
+				setError('');
+				try {
+					if (processStatus === 'running') {
+						await LocalRenderer.ipcAsync(IPC_CHANNELS.STOP_NGROK_PROCESS, site.id);
+					} else {
+						await LocalRenderer.ipcAsync(IPC_CHANNELS.START_NGROK_PROCESS, site.id);
+					}
+				} catch (e: any) {
+					setError(e?.message || 'Failed to start ngrok process');
+				} finally {
+					setUpdating(false);
+				}
+			},
+			[site.id, processStatus],
+		);
+
 		if (loading) {
 			return null;
 		}
@@ -186,7 +224,36 @@ export function createNgrokRow(React: typeof import('react')): React.FC<NgrokRow
 					>
 						Clear
 					</TextButtonExternal>
+					<TextButtonExternal
+						onClick={handleStartStop}
+						disabled={updating || !enabled || !savedUrl}
+					>
+						{processStatus === 'running' ? 'Stop' : 'Start'}
+					</TextButtonExternal>
+					{enabled && savedUrl && (
+						<span style={{
+							display: 'inline-flex',
+							alignItems: 'center',
+							gap: '4px',
+							fontSize: '12px',
+							opacity: 0.8,
+							whiteSpace: 'nowrap',
+						}}>
+							<span style={{
+								width: '8px',
+								height: '8px',
+								borderRadius: '50%',
+								backgroundColor: processStatus === 'running' ? '#51bb7b' : '#9b9b9b',
+							}} />
+							{processStatus === 'running' ? 'Tunnel active' : 'Tunnel inactive'}
+						</span>
+					)}
 				</div>
+				{error && (
+					<div style={{ color: '#e74c3c', fontSize: '12px', marginTop: '6px' }}>
+						{error}
+					</div>
+				)}
 			</TableListRow>
 		);
 	};

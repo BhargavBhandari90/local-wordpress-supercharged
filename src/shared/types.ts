@@ -98,4 +98,8 @@ export const IPC_CHANNELS = {
 	ENABLE_NGROK: 'supercharged:enable-ngrok',
 	CLEAR_NGROK: 'supercharged:clear-ngrok',
 	NGROK_CHANGED: 'supercharged:ngrok-changed',
+	START_NGROK_PROCESS: 'supercharged:start-ngrok-process',
+	STOP_NGROK_PROCESS: 'supercharged:stop-ngrok-process',
+	GET_NGROK_PROCESS_STATUS: 'supercharged:get-ngrok-process-status',
+	NGROK_PROCESS_STATUS_CHANGED: 'supercharged:ngrok-process-status-changed',
 } as const;

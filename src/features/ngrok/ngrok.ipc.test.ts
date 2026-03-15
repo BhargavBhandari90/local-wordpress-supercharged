@@ -4,6 +4,9 @@ import * as LocalMain from '@getflywheel/local/main';
 import { registerNgrokIpc, NgrokIpcDeps } from './ngrok.ipc';
 import { IPC_CHANNELS } from '../../shared/types';
 import { createMockSite, createMockWpCli, createMockSiteData, createMockLogger } from '../../test/mockCreators';
+import * as ngrokProcess from './ngrok.process';
+
+jest.mock('./ngrok.process');
 
 describe('registerNgrokIpc', () => {
 	let wpCli: ReturnType<typeof createMockWpCli>;
@@ -25,11 +28,14 @@ describe('registerNgrokIpc', () => {
 			(channel: string, handler: Function) => { handlers[channel] = handler; },
 		);
 
+		// Default: startNgrokProcess resolves to 'started'
+		(ngrokProcess.startNgrokProcess as jest.Mock).mockResolvedValue('started');
+
 		registerNgrokIpc(deps);
 	});
 
-	it('registers 4 IPC listeners', () => {
-		expect(LocalMain.addIpcAsyncListener).toHaveBeenCalledTimes(4);
+	it('registers 7 IPC listeners', () => {
+		expect(LocalMain.addIpcAsyncListener).toHaveBeenCalledTimes(7);
 	});
 
 	describe('GET_NGROK', () => {
@@ -91,12 +97,14 @@ describe('registerNgrokIpc', () => {
 	});
 
 	describe('ENABLE_NGROK -- disabling', () => {
-		it('removes WP_HOME and WP_SITEURL, preserves URL in cache', async () => {
+		it('stops ngrok process, removes WP_HOME and WP_SITEURL, preserves URL in cache', async () => {
 			const site = createMockSite({ id: 's1' });
 			siteData.getSite.mockReturnValue(site);
 			wpCli.run.mockResolvedValue(undefined);
 
 			await handlers[IPC_CHANNELS.ENABLE_NGROK]('s1', false, 'x1');
+
+			expect(ngrokProcess.stopNgrokProcess).toHaveBeenCalledWith('s1');
 
 			const allArgs = wpCli.run.mock.calls.map((c: any[]) => c[1]);
 			expect(allArgs).toContainEqual(['config', 'delete', 'WP_HOME', `--path=${site.path}`]);
@@ -108,7 +116,7 @@ describe('registerNgrokIpc', () => {
 	});
 
 	describe('ENABLE_NGROK -- collision', () => {
-		it('disables conflicting site and removes its constants', async () => {
+		it('stops conflicting process, disables conflicting site, sends process status event', async () => {
 			const conflict = createMockSite({
 				id: 's1',
 				superchargedAddon: { ngrok: { enabled: true, url: 'x1' } },
@@ -121,6 +129,9 @@ describe('registerNgrokIpc', () => {
 
 			await handlers[IPC_CHANNELS.ENABLE_NGROK]('s2', true, 'x1');
 
+			// Process killed for conflict
+			expect(ngrokProcess.stopNgrokProcess).toHaveBeenCalledWith('s1');
+
 			// 2 deletes for conflict + 2 sets for current = 4
 			expect(wpCli.run).toHaveBeenCalledTimes(4);
 
@@ -129,8 +140,11 @@ describe('registerNgrokIpc', () => {
 			expect(firstUpdate[0]).toBe('s1');
 			expect(firstUpdate[1].superchargedAddon.ngrok).toEqual({ enabled: false, url: 'x1' });
 
-			// IPC event sent for conflict
+			// IPC events sent for conflict
 			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(IPC_CHANNELS.NGROK_CHANGED, 's1', false);
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'stopped',
+			);
 		});
 
 		it('does not send events when no conflicts', async () => {
@@ -145,7 +159,7 @@ describe('registerNgrokIpc', () => {
 	});
 
 	describe('CLEAR_NGROK', () => {
-		it('removes constants if enabled, then clears cache', async () => {
+		it('stops process, removes constants if enabled, then clears cache', async () => {
 			siteData.getSite.mockReturnValue(createMockSite({
 				id: 's1',
 				superchargedAddon: { ngrok: { enabled: true, url: 'x1' } },
@@ -154,12 +168,13 @@ describe('registerNgrokIpc', () => {
 
 			await handlers[IPC_CHANNELS.CLEAR_NGROK]('s1');
 
+			expect(ngrokProcess.stopNgrokProcess).toHaveBeenCalledWith('s1');
 			expect(wpCli.run).toHaveBeenCalledTimes(2);
 			const args = siteData.updateSite.mock.calls[0][1];
 			expect(args.superchargedAddon).not.toHaveProperty('ngrok');
 		});
 
-		it('skips constant removal if not enabled', async () => {
+		it('stops process even when not enabled', async () => {
 			siteData.getSite.mockReturnValue(createMockSite({
 				id: 's1',
 				superchargedAddon: { ngrok: { enabled: false, url: 'x1' } },
@@ -167,8 +182,156 @@ describe('registerNgrokIpc', () => {
 
 			await handlers[IPC_CHANNELS.CLEAR_NGROK]('s1');
 
+			expect(ngrokProcess.stopNgrokProcess).toHaveBeenCalledWith('s1');
 			expect(wpCli.run).not.toHaveBeenCalled();
 			expect(siteData.updateSite).toHaveBeenCalled();
+		});
+	});
+
+	describe('START_NGROK_PROCESS', () => {
+		it('starts process and sends running status', async () => {
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			(site as any).httpPort = 8080;
+			siteData.getSite.mockReturnValue(site);
+
+			await handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1');
+
+			expect(ngrokProcess.startNgrokProcess).toHaveBeenCalledWith(
+				's1',
+				'https://foo.ngrok-free.dev',
+				'mysite.local',
+				8080,
+				expect.any(Function),
+			);
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'running',
+			);
+		});
+
+		it('sends running status even when tunnel is already active', async () => {
+			(ngrokProcess.startNgrokProcess as jest.Mock).mockResolvedValue('already-running');
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			(site as any).httpPort = 8080;
+			siteData.getSite.mockReturnValue(site);
+
+			await handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1');
+
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'running',
+			);
+			expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('already active'));
+		});
+
+		it('throws when no URL configured', async () => {
+			siteData.getSite.mockReturnValue(createMockSite({ id: 's1' }));
+
+			await expect(handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1'))
+				.rejects.toThrow('No ngrok URL configured');
+		});
+
+		it('uses port 80 as fallback', async () => {
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			// httpPort not set -- should default to 80
+			siteData.getSite.mockReturnValue(site);
+
+			await handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1');
+
+			expect(ngrokProcess.startNgrokProcess).toHaveBeenCalledWith(
+				's1',
+				'https://foo.ngrok-free.dev',
+				'mysite.local',
+				80,
+				expect.any(Function),
+			);
+		});
+
+		it('onExit callback sends stopped status without error on clean exit', async () => {
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			(site as any).httpPort = 80;
+			siteData.getSite.mockReturnValue(site);
+
+			await handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1');
+
+			const onExit = (ngrokProcess.startNgrokProcess as jest.Mock).mock.calls[0][4];
+			onExit('s1', undefined);
+
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'stopped', undefined,
+			);
+		});
+
+		it('onExit callback forwards error message to renderer', async () => {
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			(site as any).httpPort = 80;
+			siteData.getSite.mockReturnValue(site);
+
+			await handlers[IPC_CHANNELS.START_NGROK_PROCESS]('s1');
+
+			const onExit = (ngrokProcess.startNgrokProcess as jest.Mock).mock.calls[0][4];
+			onExit('s1', 'auth token invalid');
+
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'stopped', 'auth token invalid',
+			);
+			expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('auth token invalid'));
+		});
+	});
+
+	describe('STOP_NGROK_PROCESS', () => {
+		it('stops process and sends stopped status', async () => {
+			await handlers[IPC_CHANNELS.STOP_NGROK_PROCESS]('s1');
+
+			expect(ngrokProcess.stopNgrokProcess).toHaveBeenCalledWith('s1');
+			expect(LocalMain.sendIPCEvent).toHaveBeenCalledWith(
+				IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, 's1', 'stopped',
+			);
+		});
+	});
+
+	describe('GET_NGROK_PROCESS_STATUS', () => {
+		it('returns running and passes target to getNgrokProcessStatus', async () => {
+			(ngrokProcess.getNgrokProcessStatus as jest.Mock).mockResolvedValue('running');
+			const site = createMockSite({
+				id: 's1',
+				superchargedAddon: { ngrok: { enabled: true, url: 'https://foo.ngrok-free.dev' } },
+			});
+			(site as any).domain = 'mysite.local';
+			(site as any).httpPort = 8080;
+			siteData.getSite.mockReturnValue(site);
+
+			const result = await handlers[IPC_CHANNELS.GET_NGROK_PROCESS_STATUS]('s1');
+			expect(result).toBe('running');
+			expect(ngrokProcess.getNgrokProcessStatus).toHaveBeenCalledWith(
+				's1', 'https://foo.ngrok-free.dev', 'mysite.local:8080',
+			);
+		});
+
+		it('returns stopped when getNgrokProcessStatus reports stopped', async () => {
+			(ngrokProcess.getNgrokProcessStatus as jest.Mock).mockResolvedValue('stopped');
+			siteData.getSite.mockReturnValue(createMockSite({ id: 's1' }));
+
+			const result = await handlers[IPC_CHANNELS.GET_NGROK_PROCESS_STATUS]('s1');
+			expect(result).toBe('stopped');
 		});
 	});
 });

@@ -8,8 +8,11 @@
  */
 
 import * as LocalMain from '@getflywheel/local/main';
+import { IPC_CHANNELS } from './shared/types';
 import { registerDebugConstantsIpc } from './features/debug-constants/debug-constants.ipc';
 import { registerNgrokIpc } from './features/ngrok/ngrok.ipc';
+import { stopNgrokProcess } from './features/ngrok/ngrok.process';
+import { readNgrokCache, writeNgrokCache } from './features/ngrok/ngrok.service';
 
 export default function (context: LocalMain.AddonMainContext): void {
 	const { wpCli, siteData, localLogger } = LocalMain.getServiceContainer().cradle;
@@ -21,4 +24,15 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	registerDebugConstantsIpc({ wpCli, siteData, logger });
 	registerNgrokIpc({ wpCli, siteData, logger });
+
+	context.hooks.addAction('siteStopped', (site: any) => {
+		const cached = readNgrokCache(site);
+		if (cached?.enabled) {
+			stopNgrokProcess(site.id);
+			writeNgrokCache(siteData, site.id, { enabled: false, url: cached.url });
+			LocalMain.sendIPCEvent(IPC_CHANNELS.NGROK_PROCESS_STATUS_CHANGED, site.id, 'stopped');
+			LocalMain.sendIPCEvent(IPC_CHANNELS.NGROK_CHANGED, site.id, false);
+			logger.info(`Stopped ngrok tunnel for site ${site.id} because site was stopped`);
+		}
+	});
 }

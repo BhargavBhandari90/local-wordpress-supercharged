@@ -4,6 +4,9 @@ A [Local by Flywheel](https://localwp.com/) addon that supercharges your local W
 
 ## Features
 
+- One-Click ngrok Tunnels
+- Toggle Debug Constants
+
 ### One-Click ngrok Tunnels
 
 Expose your local WordPress site to the internet in one click. Paste your ngrok URL, hit Start, and you're live.

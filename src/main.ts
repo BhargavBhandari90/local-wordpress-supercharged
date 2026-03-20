@@ -11,11 +11,12 @@ import * as LocalMain from '@getflywheel/local/main';
 import { IPC_CHANNELS } from './shared/types';
 import { registerDebugConstantsIpc } from './features/debug-constants/debug-constants.ipc';
 import { registerNgrokIpc } from './features/ngrok/ngrok.ipc';
+import { registerProfilerSetupIpc } from './features/profiler-setup/profiler-setup.ipc';
 import { stopNgrokProcess } from './features/ngrok/ngrok.process';
 import { readNgrokCache, writeNgrokCache } from './features/ngrok/ngrok.service';
 
 export default function (context: LocalMain.AddonMainContext): void {
-	const { wpCli, siteData, localLogger } = LocalMain.getServiceContainer().cradle;
+	const { wpCli, siteData, localLogger, lightningServices, siteProcessManager } = LocalMain.getServiceContainer().cradle;
 
 	const logger = localLogger.child({
 		thread: 'main',
@@ -24,6 +25,7 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	registerDebugConstantsIpc({ wpCli, siteData, logger });
 	registerNgrokIpc({ wpCli, siteData, logger });
+	registerProfilerSetupIpc({ siteData, lightningServices, siteProcessManager, logger });
 
 	context.hooks.addAction('siteStopped', (site: any) => {
 		const cached = readNgrokCache(site);

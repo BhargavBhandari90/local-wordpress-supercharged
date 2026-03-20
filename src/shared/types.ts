@@ -47,6 +47,7 @@ export interface SuperchargedCache {
 	cachedAt: number;
 	cacheVersion?: number;
 	ngrok?: NgrokCache;
+	profiler?: ProfilerCache;
 }
 
 /**
@@ -55,6 +56,39 @@ export interface SuperchargedCache {
 export interface NgrokCache {
 	enabled: boolean;
 	url: string;
+}
+
+/**
+ * Persisted profiler setup state for a site, stored under
+ * `superchargedAddon.profiler`.
+ */
+export interface ProfilerCache {
+	setupCompleted: boolean;
+	phpVersion?: string;
+}
+
+/**
+ * Status of an individual profiler tool.
+ * 'ready' = installed and verified, 'missing' = not installed,
+ * 'error' = install attempted but failed.
+ */
+export type ToolStatus = 'ready' | 'missing' | 'error';
+
+/**
+ * Per-tool installation result with optional version and error info.
+ */
+export interface ToolCheckResult {
+	status: ToolStatus;
+	version?: string;
+	error?: string;
+}
+
+/**
+ * Aggregate profiler setup status returned by GET_PROFILER_STATUS.
+ */
+export interface ProfilerSetupStatus {
+	xhprof: ToolCheckResult;
+	k6: ToolCheckResult;
 }
 
 /**
@@ -102,4 +136,8 @@ export const IPC_CHANNELS = {
 	STOP_NGROK_PROCESS: 'supercharged:stop-ngrok-process',
 	GET_NGROK_PROCESS_STATUS: 'supercharged:get-ngrok-process-status',
 	NGROK_PROCESS_STATUS_CHANGED: 'supercharged:ngrok-process-status-changed',
+	GET_PROFILER_STATUS: 'supercharged:get-profiler-status',
+	RUN_PROFILER_SETUP: 'supercharged:run-profiler-setup',
+	PROFILER_SETUP_LOG: 'supercharged:profiler-setup-log',
+	PROFILER_SETUP_COMPLETED: 'supercharged:profiler-setup-completed',
 } as const;

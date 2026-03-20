@@ -56,6 +56,10 @@ describe('IPC_CHANNELS', () => {
 		expect(IPC_CHANNELS).toHaveProperty('ENABLE_NGROK');
 		expect(IPC_CHANNELS).toHaveProperty('CLEAR_NGROK');
 		expect(IPC_CHANNELS).toHaveProperty('NGROK_CHANGED');
+		expect(IPC_CHANNELS).toHaveProperty('GET_PROFILER_STATUS');
+		expect(IPC_CHANNELS).toHaveProperty('RUN_PROFILER_SETUP');
+		expect(IPC_CHANNELS).toHaveProperty('PROFILER_SETUP_LOG');
+		expect(IPC_CHANNELS).toHaveProperty('PROFILER_SETUP_COMPLETED');
 	});
 
 	it('prefixes all channels with "supercharged:"', () => {

@@ -1,5 +1,43 @@
 # Changelog
 
+## Version 1.6 -- [`0a477fb`](../../commit/0a477fb39437ed1e56cb3a9302a531770a7721fe)
+
+### WP Profiler setup infrastructure
+
+- Added "WP Profiler" row under the Tools tab (`siteInfoUtilities` hook) with a one-click "Setup Profiler" button
+- Compiles xhprof PHP extension from source against Local's lightning-services PHP and caches the `.so` per PHP version at `~/.wp-profiler-cache/xhprof/{version}/`
+- Downloads k6 load test binary from GitHub releases to `~/.local/bin/k6` with OS-specific archive handling (`.zip` on macOS/Windows, `.tar.gz` on Linux)
+- Live log panel streams installation progress to the UI in real time via `PROFILER_SETUP_LOG` push events
+- Post-install verification checklist shows status of each tool with green/red indicators
+- Setup is idempotent -- skips already-installed tools on re-run
+
+### Electron environment workarounds
+
+- Patched Local's phpize/php-config at runtime to replace hardcoded CI build paths (`/Users/distiller/project/...`) with actual install paths
+- Created space-free symlinks to work around phpize rejecting paths containing spaces ("Application Support")
+- All compilation steps run through the user's login shell (`/bin/zsh -l -c`) so autoconf, make, and gcc are on PATH -- Electron doesn't inherit the user's shell PATH
+- Downloads missing `pcre2.h` header from PCRE2 GitHub before compiling -- Local's PHP headers reference it but don't ship it
+- Uses `{{extensionsDir}}/xhprof.so` in `php.ini.hbs` (Handlebars template variable) so Local resolves the path at runtime, avoiding spaces-in-path issues
+- Verifies installation by checking `.so` existence and ini config rather than running PHP CLI (which doesn't load the site's config)
+
+### Files added
+
+- `src/features/profiler-setup/profiler-setup.service.ts` -- pure functions for xhprof compilation, k6 download, path helpers, status checks
+- `src/features/profiler-setup/profiler-setup.service.test.ts` -- service unit tests
+- `src/features/profiler-setup/profiler-setup.ipc.ts` -- IPC handler registration (GET_PROFILER_STATUS, RUN_PROFILER_SETUP)
+- `src/features/profiler-setup/profiler-setup.ipc.test.ts` -- IPC handler tests
+- `src/features/profiler-setup/profiler-setup.hooks.tsx` -- renderer hook registration on `siteInfoUtilities`
+- `src/features/profiler-setup/ProfilerSetupPanel.tsx` -- React component with setup button, log panel, verification checklist
+- `src/test/mockLocal.ts` -- mock for `@getflywheel/local` core types (SiteServiceRole enum)
+
+### Files modified
+
+- `src/shared/types.ts` -- added 4 IPC channels, `ProfilerCache`, `ToolStatus`, `ToolCheckResult`, `ProfilerSetupStatus` types, extended `SuperchargedCache`
+- `src/main.ts` -- wired `registerProfilerSetupIpc` with `lightningServices` and `siteProcessManager`
+- `src/renderer.tsx` -- wired `registerProfilerSetupHooks`
+- `src/test/mockCreators.ts` -- added `createMockLightningService`, `createMockLightningServices`, `createMockSiteProcessManager`, extended `createMockSite` with `paths.conf` and `paths.confTemplates`
+- `jest.config.js` -- added `@getflywheel/local` module mapping
+
 ## Version 1.5 -- [`080ed82`](../../commit/080ed8287ee2bfd36e769023c12b3b6f28a6ad9d)
 
 ### ngrok URL override feature ([`779fafb`](../../commit/779fafb8bc17064ba1658ea360064737b4965ba0))

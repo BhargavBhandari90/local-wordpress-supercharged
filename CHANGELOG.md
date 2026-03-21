@@ -1,5 +1,22 @@
 # Changelog
 
+## Version 1.9 -- [`760ffdd`](../../commit/760ffdde26aa26814073357f82b84296b1887e47)
+
+### Conflict Testing
+
+- Added "Conflict Testing" panel under the Tools tab for quick plugin conflict testing
+- Displays all active/inactive plugins in a table with DB status indicator and Active toggle
+- Toggling a plugin on/off uses the `option_active_plugins` filter hook via an mu-plugin -- no database modifications
+- Override state stored in `wp-content/conflict-test-overrides.json` on disk
+- **Cascade deactivation**: deactivating a plugin (e.g. WooCommerce) automatically deactivates all plugins that depend on it
+- **Cascade activation**: activating a dependent plugin (e.g. Google Listings & Ads) automatically activates its required plugins
+- Dependency detection via WordPress 6.5+ `RequiresPlugins` header, fetched at load time and cached
+- "Reset All" button clears all overrides and restores original DB state
+- Retry button when site is not running
+- Deployed `wp-conflict-tester.php` mu-plugin alongside the profiler agent
+- Added 4 IPC channels: `GET_PLUGIN_LIST`, `GET_CONFLICT_OVERRIDES`, `SET_CONFLICT_OVERRIDE`, `CLEAR_CONFLICT_OVERRIDES`
+- Added `PluginInfo`, `ConflictOverrides`, `PluginDependencyMap` types
+
 ## Version 1.8 -- [`1526857`](../../commit/152685752b30021589bbc2b7952ad7ac0dce48c7)
 
 ### Two-phase load test runner CLI

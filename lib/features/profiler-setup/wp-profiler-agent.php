@@ -310,11 +310,81 @@ function wp_profiler_classify_file($file_path) {
 }
 
 /**
- * Walks the XHProf call graph and attributes expensive calls to the
- * plugin/theme that initiated them. For each call, finds the first
- * caller whose file is inside wp-content/plugins/ or wp-content/themes/.
+ * Builds a caller lookup from the XHProf call graph.
+ *
+ * XHProf data keys are "caller==>callee". This builds a map from each
+ * function to its callers, so we can walk UP the call chain to find
+ * the plugin/theme code that initiated any given call.
+ *
+ * Returns: array( 'funcName' => array('caller1', 'caller2', ...) )
+ */
+function wp_profiler_build_caller_map($profile_data) {
+	$callers = array();
+
+	foreach ($profile_data as $key => $stats) {
+		$parts = explode('==>', $key);
+		if (count($parts) !== 2) continue;
+
+		$caller = preg_replace('/@\d+$/', '', $parts[0]);
+		$callee = preg_replace('/@\d+$/', '', $parts[1]);
+
+		if (!isset($callers[$callee])) {
+			$callers[$callee] = array();
+		}
+		$callers[$callee][] = $caller;
+	}
+
+	return $callers;
+}
+
+/**
+ * Walks UP the call chain from a given function to find the first
+ * ancestor whose file is inside wp-content/plugins/ or wp-content/themes/.
+ *
+ * Returns the classification + file info of the first wp-content ancestor,
+ * or null if the entire chain is core/internal.
+ */
+function wp_profiler_find_wp_content_ancestor($func_name, $caller_map, $file_map, $depth = 0) {
+	// Prevent infinite recursion
+	if ($depth > 20) return null;
+
+	if (!isset($caller_map[$func_name])) return null;
+
+	foreach ($caller_map[$func_name] as $caller) {
+		// Check if this caller is in wp-content
+		if (isset($file_map[$caller])) {
+			$cls = wp_profiler_classify_file($file_map[$caller]['file']);
+			if ($cls && ($cls['type'] === 'plugin' || $cls['type'] === 'theme')) {
+				return array(
+					'classification' => $cls,
+					'info' => $file_map[$caller],
+				);
+			}
+		}
+
+		// Keep walking up
+		$ancestor = wp_profiler_find_wp_content_ancestor($caller, $caller_map, $file_map, $depth + 1);
+		if ($ancestor) return $ancestor;
+	}
+
+	return null;
+}
+
+/**
+ * Attributes all expensive function calls to the plugin/theme that
+ * initiated them.
+ *
+ * For each function call in the XHProf data:
+ * 1. If the function itself is in wp-content/plugins or wp-content/themes,
+ *    attribute it directly.
+ * 2. If the function is core/internal, walk UP the call chain to find
+ *    the nearest plugin/theme ancestor that triggered the call.
+ * 3. If no wp-content ancestor is found, skip the entry entirely.
+ *
+ * This ensures the report only shows time spent by plugin/theme code.
  */
 function wp_profiler_attribute_calls($profile_data, $file_map) {
+	$caller_map = wp_profiler_build_caller_map($profile_data);
 	$calls = array();
 
 	foreach ($profile_data as $key => $stats) {
@@ -327,46 +397,49 @@ function wp_profiler_attribute_calls($profile_data, $file_map) {
 			continue;
 		}
 
-		// Find the caller's source
-		$caller_info = null;
-		$caller_classification = null;
+		$attribution = null;
 
-		// Check callee first
+		// First: check if the callee itself is in wp-content
 		if (isset($file_map[$callee_clean])) {
-			$caller_classification = wp_profiler_classify_file($file_map[$callee_clean]['file']);
-			if ($caller_classification) {
-				$caller_info = $file_map[$callee_clean];
+			$cls = wp_profiler_classify_file($file_map[$callee_clean]['file']);
+			if ($cls && ($cls['type'] === 'plugin' || $cls['type'] === 'theme')) {
+				$attribution = array(
+					'classification' => $cls,
+					'info' => $file_map[$callee_clean],
+				);
 			}
 		}
 
-		// If callee is core/internal, check the caller side
-		if ((!$caller_classification || $caller_classification['type'] === 'core') && count($parts) > 1) {
-			$caller = preg_replace('/@\d+$/', '', $parts[0]);
-			if (isset($file_map[$caller])) {
-				$cls = wp_profiler_classify_file($file_map[$caller]['file']);
-				if ($cls && $cls['type'] !== 'core') {
-					$caller_classification = $cls;
-					$caller_info = $file_map[$caller];
-				}
-			}
+		// Second: if callee is not in wp-content, walk up the call chain
+		if (!$attribution) {
+			$attribution = wp_profiler_find_wp_content_ancestor($callee_clean, $caller_map, $file_map);
 		}
 
-		if (!$caller_classification) {
+		// Skip if no wp-content code is responsible
+		if (!$attribution) {
 			continue;
 		}
 
+		$cls = $attribution['classification'];
+		$info = $attribution['info'];
+
 		// Skip our own profiler mu-plugin
-		if ($caller_classification['type'] === 'mu-plugin'
-			&& $caller_classification['name'] === 'wp-profiler-agent') {
+		if ($cls['type'] === 'mu-plugin'
+			&& $cls['name'] === 'wp-profiler-agent') {
+			continue;
+		}
+
+		// Skip mu-plugins entirely -- only plugins and themes
+		if ($cls['type'] === 'mu-plugin') {
 			continue;
 		}
 
 		$call = array(
 			'function'              => $callee_clean,
-			'caller_type'           => $caller_classification['type'],
-			'caller_name'           => $caller_classification['name'],
-			'caller_file'           => isset($caller_info['file']) ? $caller_info['file'] : null,
-			'caller_line'           => isset($caller_info['line']) ? $caller_info['line'] : null,
+			'caller_type'           => $cls['type'],
+			'caller_name'           => $cls['name'],
+			'caller_file'           => isset($info['file']) ? $info['file'] : null,
+			'caller_line'           => isset($info['line']) ? $info['line'] : null,
 			'call_count'            => isset($stats['ct']) ? $stats['ct'] : 1,
 			'inclusive_wall_time_us' => isset($stats['wt']) ? $stats['wt'] : 0,
 			'inclusive_cpu_us'       => isset($stats['cpu']) ? $stats['cpu'] : 0,
@@ -399,12 +472,12 @@ function wp_profiler_detect_patterns($func_name, $stats) {
 		'wp_remote_get', 'wp_remote_post', 'wp_remote_request',
 		'wp_remote_head', 'WP_Http::request',
 	))) {
-		$patterns[] = 'EXTERNAL_HTTP_CALL';
+		$patterns[] = 'EXT_HTTP';
 	}
 
 	// Excessive option reads
 	if ($func_name === 'get_option' && isset($stats['ct']) && $stats['ct'] > 10) {
-		$patterns[] = 'EXCESSIVE_OPTION_READS';
+		$patterns[] = 'EXCESS_READS';
 	}
 
 	return $patterns;

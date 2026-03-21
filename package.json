@@ -10,6 +10,9 @@
   "icon": "icon.svg",
   "slug": "local-wordpress-supercharged",
   "description": "A quick start to your amazing addon!",
+  "bin": {
+    "wp-profiler": "bin/wp-profiler.js"
+  },
   "renderer": "lib/renderer.js",
   "main": "lib/main.js",
   "repository": {

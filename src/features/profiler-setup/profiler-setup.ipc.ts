@@ -24,6 +24,7 @@ import {
 	checkK6Installed,
 	downloadAndInstallK6,
 	deployMuPlugin,
+	deployCliCommand,
 	getProfilerStatus,
 	writeProfilerCache,
 } from './profiler-setup.service';
@@ -223,6 +224,14 @@ export function registerProfilerSetupIpc(deps: ProfilerSetupIpcDeps): void {
 				muPluginResult = { status: 'error', error: e.message };
 				onLog(`mu-plugin setup failed: ${e.message}`);
 				logger.warn(`mu-plugin setup failed for site ${siteId}: ${e.message}`);
+			}
+
+			// -- CLI command setup --
+			try {
+				await deployCliCommand(onLog);
+			} catch (e: any) {
+				onLog(`CLI setup warning: ${e.message}`);
+				logger.warn(`CLI setup failed for site ${siteId}: ${e.message}`);
 			}
 
 			const status: ProfilerSetupStatus = {

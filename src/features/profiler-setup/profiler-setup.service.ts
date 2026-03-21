@@ -497,6 +497,64 @@ export function checkMuPluginInstalled(site: Local.Site): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// CLI deployment
+// ---------------------------------------------------------------------------
+
+/** Path to the wp-profiler CLI source bundled with the addon. */
+function getCliSource(): string {
+	// bin/ is at the addon root, __dirname is lib/features/profiler-setup/
+	return path.join(__dirname, '..', '..', '..', 'bin', 'wp-profiler.js');
+}
+
+/** Path where the wp-profiler symlink is placed (alongside k6). */
+export function getCliSymlinkPath(): string {
+	return path.join(os.homedir(), '.local', 'bin', 'wp-profiler');
+}
+
+/**
+ * Creates a symlink at ~/.local/bin/wp-profiler pointing to the addon's
+ * bin/wp-profiler.js so the command is available in Local's site shell.
+ */
+export async function deployCliCommand(
+	onLog: (msg: string) => void,
+): Promise<void> {
+	const source = getCliSource();
+	const symlinkPath = getCliSymlinkPath();
+
+	if (!fs.existsSync(source)) {
+		onLog(`Warning: wp-profiler.js not found at ${source}`);
+		return;
+	}
+
+	await fs.ensureDir(path.dirname(symlinkPath));
+
+	// Check if symlink already exists and points to the right target
+	if (fs.existsSync(symlinkPath)) {
+		const stat = await fs.lstat(symlinkPath);
+		if (stat.isSymbolicLink()) {
+			const target = await fs.readlink(symlinkPath);
+			if (target === source) {
+				onLog('wp-profiler command already available');
+				return;
+			}
+			await fs.remove(symlinkPath);
+		} else {
+			await fs.remove(symlinkPath);
+		}
+	}
+
+	await fs.ensureSymlink(source, symlinkPath);
+	onLog('wp-profiler command installed at ~/.local/bin/wp-profiler');
+}
+
+/**
+ * Checks whether the wp-profiler CLI is deployed.
+ */
+export function checkCliInstalled(): boolean {
+	return fs.existsSync(getCliSymlinkPath());
+}
+
+// ---------------------------------------------------------------------------
 // k6 functions
 // ---------------------------------------------------------------------------
 

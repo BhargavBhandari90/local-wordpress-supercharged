@@ -1,5 +1,41 @@
 # Changelog
 
+## Version 1.8 -- [`1526857`](../../commit/152685752b30021589bbc2b7952ad7ac0dce48c7)
+
+### Two-phase load test runner CLI
+
+- Added `wp-profiler` CLI command available in Local's site shell via symlink at `~/.local/bin/wp-profiler`
+- Two-phase load testing: Phase A (baseline, 5 warm requests with 1 VU) then Phase B (N concurrent VUs with gradual ramp-up)
+- Realistic think time (1-3s random delay between requests) to simulate real user behavior
+- k6 metrics: P50/P90/P95/P99 latency, throughput (req/sec), error rate, displayed side-by-side for baseline vs load
+- xhprof profiling on all requests in both phases (no sampling asymmetry)
+- Auto-detects site URL from Local's `sites.json` based on current working directory
+- Deploys mu-plugin symlink automatically if missing
+- Cleans up previous profiling data before each run
+- k6 progress output streamed live to terminal
+- Ctrl+C kills k6 process cleanly
+- Duration must be greater than 2x ramp-up (validated with helpful error message)
+- xhprof overhead warning displayed before tests start
+
+### Report output
+
+- **PERFORMANCE** section with HTTP response times and throughput from k6 (baseline vs load side-by-side)
+- **SLOWEST PLUGINS** table with wall time, CPU, memory, share %, degradation ratio per plugin
+- **SCALING BREAKDOWN** replacing the old hotspot/worst-scaling tables -- groups functions by plugin, only for flagged plugins (PROBLEM/WARNING/MODERATE), with per-metric ratios (Wall/CPU/Mem), bottleneck label, and auto-generated diagnosis
+- Degradation ratio calculated as worst of wall time, CPU, and memory ratios
+- Success message when all plugins scale well
+- Memory formatting fixed for small/negative byte values
+- Full file paths in function call details
+- Color-coded table headers (cyan/magenta/yellow) with descriptions
+
+### CLI arguments
+
+- `--users` (default 50), `--duration` (default 10s), `--ramp-up` (default 5s)
+- `--urls` (space-separated paths), `--username`/`--password` (WP auth)
+- `--top` (rows per table), `--baseline-requests` (default 5)
+- `--site-url` (auto-detected), `--help`
+- Supports both `--flag value` and `--flag=value` syntax
+
 ## Version 1.7 -- [`3c39252`](../../commit/3c3925216ca17f1d9abc94190d6190baae14d4d3)
 
 ### Profiler agent mu-plugin

@@ -28,7 +28,7 @@ export function registerProfilerSetupHooks(
 	const ProfilerSetupPanel = createProfilerSetupPanel(React);
 
 	hooks.addContent('siteInfoUtilities', (site) => (
-		<TableListRow key="wordpress-supercharged-profiler" label="WP Profiler">
+		<TableListRow key="wordpress-supercharged-profiler" label="Profiler">
 			<ProfilerSetupPanel site={site} />
 		</TableListRow>
 	));

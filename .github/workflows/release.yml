@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --immutable
+
+      - run: yarn test
+
+      - run: yarn build
+
+      - name: Prune dev dependencies
+        run: yarn install --production --ignore-scripts
+
+      - name: Create release ZIP
+        run: |
+          mkdir -p dist
+          zip -r dist/local-addon-wordpress-supercharged.zip . \
+            -x "src/*" \
+            -x "versions/*" \
+            -x ".github/*" \
+            -x ".git/*" \
+            -x "coverage/*" \
+            -x "dist/*" \
+            -x ".DS_Store" \
+            -x ".env" \
+            -x ".eslintcache" \
+            -x "*.log" \
+            -x "tsconfig.json" \
+            -x "jest.config.js" \
+            -x "CHANGELOG.md" \
+            -x "README.md" \
+            -x "yarn.lock" \
+            -x ".yarn/*" \
+            -x ".gitignore" \
+            -x "gifs/*"
+
+      - name: Upload ZIP to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/local-addon-wordpress-supercharged.zip

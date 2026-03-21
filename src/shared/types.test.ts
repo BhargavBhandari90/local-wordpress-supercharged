@@ -9,14 +9,15 @@ import {
 } from './types';
 
 describe('DEBUG_CONSTANTS', () => {
-	it('contains exactly 3 constant names', () => {
-		expect(DEBUG_CONSTANTS).toHaveLength(3);
+	it('contains exactly 4 constant names', () => {
+		expect(DEBUG_CONSTANTS).toHaveLength(4);
 	});
 
-	it('includes WP_DEBUG, WP_DEBUG_LOG, and WP_DEBUG_DISPLAY', () => {
+	it('includes WP_DEBUG, WP_DEBUG_LOG, WP_DEBUG_DISPLAY, and SCRIPT_DEBUG', () => {
 		expect(DEBUG_CONSTANTS).toContain('WP_DEBUG');
 		expect(DEBUG_CONSTANTS).toContain('WP_DEBUG_LOG');
 		expect(DEBUG_CONSTANTS).toContain('WP_DEBUG_DISPLAY');
+		expect(DEBUG_CONSTANTS).toContain('SCRIPT_DEBUG');
 	});
 });
 

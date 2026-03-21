@@ -8,7 +8,7 @@
  */
 
 import * as LocalMain from '@getflywheel/local/main';
-import { IPC_CHANNELS } from './shared/types';
+import { IPC_CHANNELS, FEATURE_FLAGS } from './shared/types';
 import { registerDebugConstantsIpc } from './features/debug-constants/debug-constants.ipc';
 import { registerNgrokIpc } from './features/ngrok/ngrok.ipc';
 import { registerProfilerSetupIpc } from './features/profiler-setup/profiler-setup.ipc';
@@ -26,7 +26,9 @@ export default function (context: LocalMain.AddonMainContext): void {
 
 	registerDebugConstantsIpc({ wpCli, siteData, logger });
 	registerNgrokIpc({ wpCli, siteData, logger });
-	registerProfilerSetupIpc({ siteData, lightningServices, siteProcessManager, logger });
+	if (FEATURE_FLAGS.PROFILER) {
+		registerProfilerSetupIpc({ siteData, lightningServices, siteProcessManager, logger });
+	}
 	registerConflictTestIpc({ wpCli, siteData, logger });
 
 	context.hooks.addAction('siteStopped', (site: any) => {

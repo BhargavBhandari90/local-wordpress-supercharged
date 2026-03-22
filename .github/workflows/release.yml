@@ -27,55 +27,30 @@ jobs:
       - name: Prune dev dependencies
         run: yarn install --production --ignore-scripts
 
-      - name: Create release ZIP
-        run: |
-          mkdir -p dist
-          zip -r dist/local-addon-wordpress-supercharged.zip . \
-            -x "src/*" \
-            -x "versions/*" \
-            -x ".github/*" \
-            -x ".git/*" \
-            -x "coverage/*" \
-            -x "dist/*" \
-            -x ".DS_Store" \
-            -x ".env" \
-            -x ".eslintcache" \
-            -x "*.log" \
-            -x "tsconfig.json" \
-            -x "jest.config.js" \
-            -x "CHANGELOG.md" \
-            -x "README.md" \
-            -x "yarn.lock" \
-            -x ".yarn/*" \
-            -x ".gitignore" \
-            -x "gifs/*"
-
       - name: Create release tarball
         run: |
-          tar czvf dist/local-addon-wordpress-supercharged.tar.gz \
-            --exclude="src" \
-            --exclude="versions" \
-            --exclude=".github" \
-            --exclude=".git" \
-            --exclude="coverage" \
-            --exclude="dist" \
+          tar czvf /tmp/local-addon-wordpress-supercharged.tar.gz \
+            --exclude="./src" \
+            --exclude="./versions" \
+            --exclude="./.github" \
+            --exclude="./.git" \
+            --exclude="./coverage" \
             --exclude=".DS_Store" \
             --exclude=".env" \
             --exclude=".eslintcache" \
             --exclude="*.log" \
-            --exclude="tsconfig.json" \
-            --exclude="jest.config.js" \
-            --exclude="CHANGELOG.md" \
-            --exclude="README.md" \
-            --exclude="yarn.lock" \
-            --exclude=".yarn" \
-            --exclude=".gitignore" \
-            --exclude="gifs" \
+            --exclude="./tsconfig.json" \
+            --exclude="./jest.config.js" \
+            --exclude="./CHANGELOG.md" \
+            --exclude="./README.md" \
+            --exclude="./yarn.lock" \
+            --exclude="./.yarn" \
+            --exclude="./.gitignore" \
+            --exclude="./gifs" \
             .
 
       - name: Upload assets to release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/local-addon-wordpress-supercharged.zip
-            dist/local-addon-wordpress-supercharged.tar.gz
+            /tmp/local-addon-wordpress-supercharged.tar.gz

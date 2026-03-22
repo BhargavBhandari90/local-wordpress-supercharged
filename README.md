@@ -4,8 +4,9 @@ A [Local by Flywheel](https://localwp.com/) addon that supercharges your local W
 
 ## Features
 
-- One-Click ngrok Tunnels
-- Toggle Debug Constants
+- [Conflict Testing](#conflict-testing)
+- [One-Click ngrok Tunnels](#one-click-ngrok-tunnels)
+- [Toggle Debug Constants](#toggle-debug-constants)
 
 ### Conflict Testing
 
